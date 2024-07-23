@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chatbot Demo</title>
+    <style>
+        .chat-container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .chat-container h1, .chat-container h2 {
+            font-family: Arial, sans-serif;
+        }
+        .chat-container form {
+            margin-bottom: 20px;
+        }
+        .chat-container label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .chat-container input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .chat-container button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .chat-container button:hover {
+            background-color: #45a049;
+        }
+        .chat-container .chat-box {
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <h1>Chatbot Demo</h1>
+        {% if answer %}
+            <div class="chat-box">
+                <p><strong>Bot:</strong> {{ answer }}</p>
+            </div>
+        {% endif %}
+        <form id="chat-form" method="post">
+            {% csrf_token %}
+            <label for="question">Your Question:</label>
+            <input type="text" id="question" name="question">
+            <button type="button" id="start-record-btn">Start Recording</button>
+            <button type="button" id="stop-record-btn" disabled>Stop Recording</button>
+            <button type="button" id="retry-btn" disabled>Retry Audio</button>
+            <button type="submit">Submit</button>
+            <audio id="audio" controls></audio>
+        </form>
+    </div>
+
+    <script>
+        const startRecordButton = document.getElementById('start-record-btn');
+        const stopRecordButton = document.getElementById('stop-record-btn');
+        const retryButton = document.getElementById('retry-btn');
+        const audioElement = document.getElementById('audio');
+        const questionInput = document.getElementById('question');
+
+        let mediaRecorder;
+        let audioChunks = [];
+
+        startRecordButton.addEventListener('click', async () => {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.start();
+
+            mediaRecorder.addEventListener('dataavailable', event => {
+                audioChunks.push(event.data);
+            });
+
+            mediaRecorder.addEventListener('stop', () => {
+                const audioBlob = new Blob(audioChunks);
+                audioChunks = [];
+                const audioUrl = URL.createObjectURL(audioBlob);
+                audioElement.src = audioUrl;
+
+                // Save audio blob to form data
+                const formData = new FormData();
+                formData.append('audio', audioBlob, 'audio.wav');
+
+                fetch('{% url "audio_to_text" %}', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.text) {
+                        questionInput.value = data.text;  // Set the transcribed text to the input field
+                        retryButton.disabled = false;  // Enable retry button after transcription
+                    }
+                });
+            });
+
+            startRecordButton.disabled = true;
+            stopRecordButton.disabled = false;
+        });
+
+        stopRecordButton.addEventListener('click', () => {
+            mediaRecorder.stop();
+            startRecordButton.disabled = false;
+            stopRecordButton.disabled = true;
+        });
+
+        retryButton.addEventListener('click', () => {
+            questionInput.value = '';  // Clear the question input
+            audioElement.src = '';  // Clear the audio element
+            retryButton.disabled = true;  // Disable retry button until new audio is recorded
+        });
+
+        // Ensure form submission is handled properly
+        document.getElementById('chat-form').addEventListener('submit', (event) => {
+            if (!questionInput.value) {
+                event.preventDefault();
+                alert('Please provide a question either by typing or recording audio.');
+            }
+        });
+    </script>
+</body>
+</html>
