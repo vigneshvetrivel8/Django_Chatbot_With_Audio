@@ -11,7 +11,7 @@ python manage.py runserver
 
 ## If the Above Steps Don't Work, Use a Virtual Environment:
 ### Step 1: Create and Activate a Virtual Environment
-virtualenv venv
+virtualenv venv  
 source venv/bin/activate
 
 ### Step 2: Install Django
